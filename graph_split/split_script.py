@@ -19,7 +19,6 @@ def remove_dups(df, graph_type='undirected'):
      remain in the final dataset where D is another edge_type.
     - When 'edge_type' is absent then keep only one instance of (a,b).
     - If it is an undirected graph, then keep either (a, b, C) or (b, a, C) (and (a, b) or (b, a)).
-
     '''
 
     if 'edge_type' in df.columns:
@@ -39,9 +38,9 @@ def remove_dups(df, graph_type='undirected'):
 
 def split_list(d_list, n_folds, seed):
     '''
-    :param d_list: list of tuples where each drug pairs or list of drugs or list of cell lines.
-    :param n_folds: In how many folds to split the drug_combs list
-    :return: a dict where key=fold number, value=list of drug_pairs in that fold.
+    :param d_list: list of nodes, edges, or edge types.
+    :param n_folds: In how many folds to split the values in the list.
+    :return: a dict where key=fold number, value=list of values in that fold.
     '''
     #split in n_folds
     random.Random(seed).shuffle(d_list)
@@ -54,7 +53,7 @@ def split_list(d_list, n_folds, seed):
 
 def verify_split(df, train_idx, test_idx, split_type):
     '''
-    :return: Given a df with sample data (e.g., synergy triplets), verify that the train and test
+    :return: Given df, train idx and test_idx, verify that the train and test
     data have been created properly according to the split type.'''
     train_df = df.iloc[train_idx]
     test_df = df.iloc[test_idx]
@@ -99,7 +98,7 @@ def split_random_train_test(df, test_frac, seed=None):
     return train_idx, test_idx
 
 def split_edge_train_test(df, test_frac, seed=None):
-    ''' Input: synergy_df = a dataframe with atleast two columns ['source','target'].
+    ''' Input: df = a dataframe with atleast two columns ['source','target'].
         Function: edge appearing in train (irrespective of the edge type) will not appear in test. '''
 
     df['ID'] = list(range(len(df)))
@@ -123,8 +122,7 @@ def split_edge_train_test(df, test_frac, seed=None):
 def split_node_train_test(df, test_frac, seed=None):
 
     '''
-    Function: Split the nodes appear in source or target into train test. Then split the samples (e.g., triplets)
-    training samples only contain training nodes and the same for test samples.
+    Function: Nodes appearing in training data will not appear in any edge in the test.
     '''
     df['ID'] = list(range(len(df)))
 
@@ -163,10 +161,10 @@ def split_node_train_test(df, test_frac, seed=None):
 
 
 def split_edge_type_train_test(df, test_frac, seed=None):
+
     '''
-       Function: Split the nodes appear in source or target into train test. Then split the samples (e.g., triplets)
-       training samples only contain training nodes and the same for test samples.
-       '''
+    Edge type appearing in training data will not appear in the test.
+    '''
     df['ID'] = list(range(len(df)))
 
     edge_types = list(df['edge_type'].unique())
@@ -187,11 +185,6 @@ def split_edge_type_train_test(df, test_frac, seed=None):
 
 
 def split_random_cv(df, n_folds, seed=None):
-    '''
-    df: columns = ['source', 'target']
-    function:  If edge with a certain edge_type appear in train, the same edge with the same edge_type will not
-    appear in test. However, the same edge (i.e., same source and target) from another edge type may appear in test.
-    '''
 
     indices = list(range(len(df)))
     fold_size = int(len(indices)/n_folds)
@@ -208,7 +201,7 @@ def split_random_cv(df, n_folds, seed=None):
 
 def split_edge_cv(df, n_folds, seed=None):
     '''
-        Input: synergy_df = a dataframe with atleast two columns ['source','target'].
+        Input: df = a dataframe with atleast two columns ['source','target'].
 
         Function: edge appearing in train (irrespective of the edge type) will not appear in test.
     '''
@@ -237,8 +230,7 @@ def split_edge_cv(df, n_folds, seed=None):
 def split_node_cv(df, n_folds, seed=None):
 
     '''
-    Function: Split the nodes appear in source or target into train test. Then split the samples (e.g., triplets)
-    training samples only contain training nodes and the same for test samples.
+    Nodes appearing in training data will not appear in any edge in the test.
     '''
 
     df['ID'] = list(range(len(df)))
@@ -251,10 +243,6 @@ def split_node_cv(df, n_folds, seed=None):
 
     df_split = {i: df[(df['source'].isin(node_folds[i])) & (df['target'].isin(node_folds[i]))]  for i in range(n_folds)}
 
-    #catch: we will assign fold to triplets. It's expected that the triplets containing drugs from both
-    # val and training set will not be used in training or validation. However, concatenate
-    # triplets from the above 5 splits/folds will reduce the data unnecessarily. Let say, fold1 is validation fold.
-    #In this case, any triplets containing drug from fold 2 and 3 should be part of training.
     train_idx = {}
     val_idx = {}
     for i in range(n_folds):
@@ -270,13 +258,8 @@ def split_node_cv(df, n_folds, seed=None):
 
 
 def split_edge_type_cv(df, n_folds, seed=None):
-
     '''
-    :param df:
-    :param n_folds:
-
-
-    :return:
+    Edge type appearing in training data will not appear in the test.
     '''
     df['ID'] = list(range(len(df)))
 
