@@ -7,6 +7,35 @@ import copy
 import sys
 import pickle
 import math
+def remove_dups(df, graph_type='undirected'):
+    '''
+    Inputs: df (dataframe) containing at least two columns named 'source' and 'target'. An optional column can be 'edge_type'.
+            Depending on the presence of 'edge_type' a pair, e.g., (a,b) or a triplet, e.g., (a,b,C) can represent an edge.
+            Here, a = source node, b = target node, C = edge type.
+    graph_type (str): 'directed' or 'undirected'
+
+    Function: Remove redundant/repeated edges.
+    - When 'edge_type' is present then keep only one instance of (a, b, C). Note that, (a, b, C) and (a, b, D) can
+     remain in the final dataset where D is another edge_type.
+    - When 'edge_type' is absent then keep only one instance of (a,b).
+    - If it is an undirected graph, then keep either (a, b, C) or (b, a, C) (and (a, b) or (b, a)).
+
+    '''
+
+    if 'edge_type' in df.columns:
+        df.drop_duplicates(subset=['source', 'target', 'edge_type'], keep='first', inplace=True)
+    else:
+        df.drop_duplicates(subset=['source', 'target'], keep='first', inplace=True)
+
+    if graph_type == 'undirected':
+        df['sorted_col1'] = np.minimum(df['source'], df['target'])
+        df['sorted_col2'] = np.maximum(df['source'], df['target'])
+
+        # Drop duplicates based on the sorted columns
+        df = df.drop_duplicates(subset=['sorted_col1', 'sorted_col2']).drop(
+            columns=['sorted_col1', 'sorted_col2'])
+    return df
+
 
 def split_list(d_list, n_folds, seed):
     '''
@@ -31,31 +60,37 @@ def verify_split(df, train_idx, test_idx, split_type):
     test_df = df.iloc[test_idx]
 
     if split_type=='random':
-        test_triplets = set(zip(test_df['source'],test_df['target'],test_df['edge_type']))
-        train_triplets = set(zip(train_df['source'],train_df['target'],train_df['edge_type']))
-        n_common = len(test_triplets.intersection(train_triplets))
+        if 'edge_type' in df.columns:
+            test_triplets = set(zip(test_df['source'],test_df['target'],test_df['edge_type']))
+            train_triplets = set(zip(train_df['source'],train_df['target'],train_df['edge_type']))
+            n_common = len(test_triplets.intersection(train_triplets))
+
+        else:
+            test_edges = set(zip(test_df['source'], test_df['target']))
+            train_edges = set(zip(train_df['source'], train_df['target']))
+            n_common = len(test_edges.intersection(train_edges))
         assert n_common == 0, print(f'error in {split_type} split')
 
 
-    if split_type=='leave_comb':
+    if split_type=='edge':
         test_edges = set(zip(test_df['source'],test_df['target']))
         train_edges = set(zip(train_df['source'],train_df['target']))
         n_common = len(test_edges.intersection(train_edges))
-        assert n_common == 0, print(f'error in {split_type} split')
+        assert n_common == 0, print(f'error in {split_type} based split')
 
 
-    if split_type=='leave_drug':
+    if split_type=='node':
         test_nodes = set(test_df['source']).union(set(test_df['target']))
         train_nodes = set(train_df['source']).union(set(train_df['target']))
         n_common = len(test_nodes.intersection(train_nodes))
-        assert n_common == 0, print(f'error in {split_type} split')
+        assert n_common == 0, print(f'error in {split_type} based split')
 
 
-    if split_type=='leave_cell_line':
+    if split_type=='edge_type':
         test_edge_type = set(test_df['edge_type'])
         train_edge_type = set(train_df['edge_type'])
         n_common = len(test_edge_type.intersection(train_edge_type))
-        assert n_common == 0, print(f'error in {split_type} split')
+        assert n_common == 0, print(f'error in {split_type} based split')
 
 
 def split_random_train_test(df, test_frac, seed=None):
@@ -264,13 +299,49 @@ def split_edge_type_cv(df, n_folds, seed=None):
     return train_idx, val_idx
 
 def split_train_test(df, split_type, test_frac, seed=None):
+    '''
+    Inputs:
+        df (dataframe): contains at least two columns named 'source' and 'target'. An optional column can be 'edge_type'.
+                Depending on the presence of 'edge_type' a pair, e.g., (a,b) or a triplet, e.g., (a,b,C) can represent an edge.
+                Here, a = source node, b = target node, C = edge type.
+                There should not be any duplicated edge. If needed, use the remove_dups() function beforehand
+                to remove duplicates.
+        split_type (str): The values can be: 'random', 'node', 'edge', or 'edge_type'.
+        test_frac (float): Fraction of  expected test samples.
+        seed (int or None):
+                - int will assure the same splits each time you split the data.
+                - None will give different splits at each run.
+    Return:
+        1. train_idx(list): df.iloc[train_idx] consists the training dataset.
+        2. test_idx(list): df.iloc[test_idx] consists the test dataset.
+    '''
     split_type_2_function_map = {'random': split_random_train_test ,'node': split_node_train_test, 'edge': split_edge_train_test, 'edge_type': split_edge_type_train_test}
     train_idx, test_idx = split_type_2_function_map[split_type](df, test_frac, seed=seed)
+    verify_split(df, train_idx, test_idx, split_type)
     return train_idx, test_idx
 
 def split_cv(df, split_type, n_folds, seed=None):
+    '''
+    Inputs:
+        df (dataframe): contains at least two columns named 'source' and 'target'. An optional column can be 'edge_type'.
+                Depending on the presence of 'edge_type' a pair, e.g., (a,b) or a triplet, e.g., (a,b,C) can represent an edge.
+                Here, a = source node, b = target node, C = edge type.
+                There should not be any duplicated edge. If needed, use the remove_dups() function beforehand
+                to remove duplicates.
+        split_type (str): The values can be: 'random', 'node', 'edge', or 'edge_type'.
+        n_folds (int): Number of folds in cross-validation.
+        seed (int or None):
+                - int will assure the same splits each time you split the data.
+                - None will give different splits at each run.
+    Return:
+        1. train_idx(dict): df.iloc[train_idx[i]] consists the training dataset for ith fold.
+        2. test_idx(dict): df.iloc[test_idx[i]] consists the test dataset for ith fold.
+    '''
     split_type_2_function_map = {'random': split_random_cv ,'node': split_node_cv, 'edge': split_edge_cv, 'edge_type': split_edge_type_cv}
     train_idx, test_idx = split_type_2_function_map[split_type](df, n_folds, seed=seed)
+
+    for i in range(n_folds):
+        verify_split(df, train_idx[i], test_idx[i], split_type)
     return train_idx, test_idx
 
 

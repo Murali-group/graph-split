@@ -1,8 +1,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="graph-split",      # Replace with your package name
-    version="0.1.0",               # Initial version
+    name="graph_split",      # Replace with your package name
+    version="0.2.1",               # Initial version
     author="Nure Tasnina",
     author_email="tasnina@vt.edu",
     description="A package to split edges of graph using different crieteria compatible for machine learning model training.",
