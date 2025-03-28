@@ -1,12 +1,10 @@
 import numpy as np
-import random
 import pandas as pd
 from sklearn.model_selection import train_test_split
-import os
 import copy
 import sys
-import pickle
-import math
+import random
+
 def remove_dups(df, graph_type='undirected'):
     '''
     Inputs: df (dataframe) containing at least two columns named 'source' and 'target'. An optional column can be 'edge_type'.
@@ -93,8 +91,25 @@ def verify_split(df, train_idx, test_idx, split_type):
 
 
 def split_random_train_test(df, test_frac, seed=None):
-    indices = list(range(len(df)))
-    train_idx, test_idx = train_test_split(indices, test_size=test_frac, random_state=seed)
+    df['ID'] = list(range(len(df)))
+    if 'edge_type' in df.columns:
+        edges = list(set(zip(df['source'], df['target'], df['edge_type'])))
+    else:
+        edges = list(zip(df['source'], df['target']))
+    # as I used set() to get unique edges, we will lose the initial order of edges. Hence, we need to sort the edges. Otherwise the same edges can appear in different
+    # order in different runs, thus using random_state=int(e.g., 42) will not ensure the reproducible split each time on the same dataset.
+    edges.sort()
+    #split edges into train and test set
+    train_edges, test_edges = train_test_split(edges, test_size=test_frac, random_state=seed)
+    if 'edge_type' in df.columns:
+        test_idx = list(df[df[['source','target','edge_type']].apply(tuple, axis=1).isin(test_edges)]['ID'])
+    else:
+        test_idx = list(df[df[['source','target']].apply(tuple, axis=1).isin(test_edges)]['ID'])
+
+    # train_idx = list(df['ID'].drop(test_idx))
+    train_idx = list(df['ID'][~df['ID'].isin(test_idx)])
+    df.drop(columns='ID', inplace=True)
+
     return train_idx, test_idx
 
 def split_edge_train_test(df, test_frac, seed=None):
@@ -111,8 +126,8 @@ def split_edge_train_test(df, test_frac, seed=None):
     train_edges, test_edges = train_test_split(edges, test_size=test_frac, random_state=seed)
 
     test_idx = list(df[df[['source','target']].apply(tuple, axis=1).isin(test_edges)]['ID'])
-    train_idx = list(df['ID'].drop(test_idx))
-
+    # train_idx = list(df['ID'].drop(test_idx))
+    train_idx = list(df['ID'][~df['ID'].isin(test_idx)])
     df.drop(columns='ID', inplace=True)
 
     return train_idx, test_idx
@@ -176,8 +191,8 @@ def split_edge_type_train_test(df, test_frac, seed=None):
 
     # both source and target has to be in test_nodes for a triplet or edge to be considered in test dataset.
     test_idx = list(df[(df['edge_type'].isin(test_edge_types))]['ID'])
-    train_idx = list(df['ID'].drop(test_idx))
-
+    # train_idx = list(df['ID'].drop(test_idx))
+    train_idx = list(df['ID'][~df['ID'].isin(test_idx)])
 
     df.drop(columns='ID', inplace=True)
     return train_idx, test_idx
@@ -185,24 +200,36 @@ def split_edge_type_train_test(df, test_frac, seed=None):
 
 
 def split_random_cv(df, n_folds, seed=None):
+    df['ID'] = list(range(len(df)))
+    if 'edge_type' in df.columns:
+        edges = list(set(zip(df['source'], df['target'], df['edge_type'])))  # list of tuples
+    else:
+        edges = list(set(zip(df['source'], df['target'])))  # list of tuples
+    edges.sort()
 
-    indices = list(range(len(df)))
-    fold_size = int(len(indices)/n_folds)
+    # prepare train and val split
+    edge_folds = split_list(edges, n_folds, seed=seed)
 
-    remaining_idx = copy.deepcopy(indices)
+    if 'edge_type' in df.columns:
+        df_split = {i: df[df[['source', 'target','edge_type']].apply(tuple, axis=1).isin(edge_folds[i])] for i in range(n_folds)}
+    else:
+        df_split = {i: df[df[['source', 'target']].apply(tuple, axis=1).isin(edge_folds[i])] for i in range(n_folds)}
+
     train_idx = {}
     val_idx = {}
     for i in range(n_folds):
-        val_idx[i] = random.Random(seed).sample(remaining_idx, fold_size)
-        train_idx[i] = list(set(indices).difference(set(val_idx[i])))
-        remaining_idx = list(set(remaining_idx).difference(set(val_idx[i])))
+        val_idx[i] = list(df_split[i]['ID'])
+        # train_idx[i] = list(df['ID'].drop(val_idx[i]))
+        train_idx[i] = list(df['ID'][~df['ID'].isin(val_idx[i])])
+
+    df.drop(columns='ID', inplace=True)
 
     return train_idx, val_idx
+
 
 def split_edge_cv(df, n_folds, seed=None):
     '''
         Input: df = a dataframe with atleast two columns ['source','target'].
-
         Function: edge appearing in train (irrespective of the edge type) will not appear in test.
     '''
     df['ID'] = list(range(len(df)))
@@ -219,7 +246,8 @@ def split_edge_cv(df, n_folds, seed=None):
     val_idx = {}
     for i in range(n_folds):
         val_idx[i] = list(df_split[i]['ID'])
-        train_idx[i] = list(df['ID'].drop(val_idx[i]))
+        # train_idx[i] = list(df['ID'].drop(val_idx[i]))
+        train_idx[i] = list(df['ID'][~df['ID'].isin(val_idx[i])])
 
     df.drop(columns='ID', inplace=True)
 
@@ -275,7 +303,8 @@ def split_edge_type_cv(df, n_folds, seed=None):
     val_idx = {}
     for i in range(n_folds):
         val_idx[i] = list(df_split[i]['ID'])
-        train_idx[i] = list(df['ID'].drop(val_idx[i]))
+        # train_idx[i] = list(df['ID'].drop(val_idx[i]))
+        train_idx[i] = list(df['ID'][~df['ID'].isin(val_idx[i])])
 
     df.drop(columns='ID', inplace=True)
 
@@ -326,6 +355,39 @@ def split_cv(df, split_type, n_folds, seed=None):
     for i in range(n_folds):
         verify_split(df, train_idx[i], test_idx[i], split_type)
     return train_idx, test_idx
+
+def generate_negative_samples(df, graph_type='directed', anchor='source', seed=None):
+    '''
+    Parameters:
+        graph_type: 'undirected', 'directed'
+        anchor: 'source', 'target', 'both'
+
+    If graph_type=='directed' and anchor=='source':
+        - without edge_type: For any positive edge (a, b) create a negative edge (a, c) such that (a, c) was not present in the set of positive edges.
+    '''
+
+    #works for directed, anchor based graph without edgetype.
+    if df.shape[1]>2:
+        exit('Error: Not implemented for extra information on edges except for source and target. ')
+
+    all_sampled_sources = []
+    all_sampled_targets = []
+
+    if (graph_type=='directed') and (anchor=='source'):
+        init_sample_space = set(df['target'].unique())
+
+        source_wise_targets = df.groupby('source').agg(target_list= ('target', lambda x:set(x)), count = ('target', 'size')).reset_index()
+        source_wise_targets['target_list'] = source_wise_targets['target_list'].apply(lambda x: sorted(init_sample_space.difference(x)))
+
+        for i, row in source_wise_targets.iterrows():
+            sample_count = min(row['count'], len(row['target_list']))
+            all_sampled_targets.extend(list(random.Random(seed).sample(row['target_list'],sample_count)))
+            all_sampled_sources.extend([row['source']]*sample_count)
+        negative_df = pd.DataFrame({'source': all_sampled_sources, 'target': all_sampled_targets})
+
+        return negative_df
+    else:
+        exit('Error: current code only works for graph_type= directed, anchor=source. ')
 
 
 
