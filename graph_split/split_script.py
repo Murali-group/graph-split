@@ -356,38 +356,44 @@ def split_cv(df, split_type, n_folds, seed=None):
         verify_split(df, train_idx[i], test_idx[i], split_type)
     return train_idx, test_idx
 
-def generate_negative_samples(df, graph_type='directed', anchor='source', seed=None):
+def generate_negative_samples(edges, random_samples, duplicates=True, seed=None):
     '''
+    For any positive edge **(a, b)**, create a negative edge **(a, c)** such that (a, c) was not present in the set of positive edges.
     Parameters:
-        graph_type: 'undirected', 'directed'
-        anchor: 'source', 'target', 'both'
-
-    If graph_type=='directed' and anchor=='source':
-        - without edge_type: For any positive edge (a, b) create a negative edge (a, c) such that (a, c) was not present in the set of positive edges.
+        edges: Pandas DataFrame containing two columns where each row is the edge (a, b).
+        random_samples: Pandas series containing list of possible labels for c. None if c should be sampled from the set of b.
+        duplicates: True if the edge (a, c) should be able to appear more than once.
+        seed: Random generation seed for reproducibility of samples.
+    :return: DataFrame containing negative edges (a, c)
     '''
 
     #works for directed, anchor based graph without edgetype.
     if df.shape[1]>2:
-        exit('Error: Not implemented for extra information on edges except for source and target. ')
+        raise ValueError('Too many columns! Ensure edges only contain columns for an edge (a, b) and no other information.')
+    df = edges.rename({'source', 'target'})
+    init_sample_space = []
+    if (random_samples == None):
+        init_sample_space = set(df['target'].unique())
+    else:
+        init_sample_space = set(random_samples.unique())
+        
+    source_wise_targets = df.groupby('source')['target'].agg([('target_list', lambda x:set(x)), ('count', 'size')]).reset_index()
+    source_wise_targets['target_list'] = source_wise_targets['target_list'].apply(lambda x: sorted(init_sample_space.difference(x)))
 
     all_sampled_sources = []
     all_sampled_targets = []
-
-    if (graph_type=='directed') and (anchor=='source'):
-        init_sample_space = set(df['target'].unique())
-
-        source_wise_targets = df.groupby('source').agg(target_list= ('target', lambda x:set(x)), count = ('target', 'size')).reset_index()
-        source_wise_targets['target_list'] = source_wise_targets['target_list'].apply(lambda x: sorted(init_sample_space.difference(x)))
-
-        for i, row in source_wise_targets.iterrows():
+    for i, row in source_wise_targets.iterrows():
+        sample_count = 0
+        if (duplicates == False):
             sample_count = min(row['count'], len(row['target_list']))
             all_sampled_targets.extend(list(random.Random(seed).sample(row['target_list'],sample_count)))
-            all_sampled_sources.extend([row['source']]*sample_count)
-        negative_df = pd.DataFrame({'source': all_sampled_sources, 'target': all_sampled_targets})
+        else:
+            sample_count = row['count']
+            all_sampled_targets.extend(list(random.Random(seed).choices(row['target_list'], k=sample_count)))
+        all_sampled_sources.extend([row['source']]*sample_count)
+    negative_df = pd.DataFrame({'source': all_sampled_sources, 'target': all_sampled_targets})
 
-        return negative_df
-    else:
-        exit('Error: current code only works for graph_type= directed, anchor=source. ')
+    return negative_df
 
 
 
