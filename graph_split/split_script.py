@@ -379,7 +379,6 @@ def generate_negative_samples(edges, random_samples, duplicates=True, seed=None)
         
     source_wise_targets = df.groupby('source')['target'].agg([('target_list', lambda x:set(x)), ('count', 'size')]).reset_index()
     source_wise_targets['target_list'] = source_wise_targets['target_list'].apply(lambda x: sorted(init_sample_space.difference(x)))
-    print(source_wise_targets)
 
     all_sampled_sources = []
     all_sampled_targets = []
