@@ -368,32 +368,31 @@ def generate_negative_samples(edges, random_samples, duplicates=True, seed=None)
     '''
 
     #works for directed, anchor based graph without edgetype.
+    random.seed(seed)
     if edges.shape[1]>2:
         raise ValueError('Too many columns! Ensure edges only contain columns for an edge (a, b) and no other information.')
-    df = edges.set_axis(['source', 'target'], axis=1)
+    df = edges.set_axis(['source', 'target'], axis=1, inplace=False)
     init_sample_space = []
     if (random_samples is None):
         init_sample_space = set(df['target'].unique())
     else:
         init_sample_space = set(random_samples.unique())
-        
+    
     source_wise_targets = df.groupby('source')['target'].agg([('target_list', lambda x:set(x)), ('count', 'size')]).reset_index()
     source_wise_targets['target_list'] = source_wise_targets['target_list'].apply(lambda x: sorted(init_sample_space.difference(x)))
 
     all_sampled_sources = []
     all_sampled_targets = []
-    randomChanger = 0
     for i, row in source_wise_targets.iterrows():
         sample_count = 0
         if (duplicates == False):
             sample_count = min(row['count'], len(row['target_list']))
-            all_sampled_targets.extend(list(random.Random(seed + randomChanger).sample(row['target_list'],sample_count)))
+            all_sampled_targets.extend(list(random.sample(row['target_list'],sample_count)))
         else:
             sample_count = row['count']
-            all_sampled_targets.extend(list(random.Random(seed + randomChanger).choices(row['target_list'], k=sample_count)))
+            all_sampled_targets.extend(list(random.choices(row['target_list'], k=sample_count)))
         all_sampled_sources.extend([row['source']]*sample_count)
-        randomChanger += 1
-    negative_df = pd.DataFrame({'source': all_sampled_sources, 'target': all_sampled_targets})
+    negative_df = pd.DataFrame({'source': all_sampled_sources, 'target': all_sampled_targets}) 
     return negative_df
 
 
