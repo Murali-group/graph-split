@@ -368,7 +368,7 @@ def generate_negative_samples(edges, random_samples, duplicates=True, seed=None)
     '''
 
     #works for directed, anchor based graph without edgetype.
-    random = np.random.RandomState(seed)
+    randomState = np.random.RandomState(seed)
     if edges.shape[1]>2:
         raise ValueError('Too many columns! Ensure edges only contain columns for an edge (a, b) and no other information.')
     df = edges.set_axis(['source', 'target'], axis=1, inplace=False)
@@ -387,10 +387,10 @@ def generate_negative_samples(edges, random_samples, duplicates=True, seed=None)
         sample_count = 0
         if (duplicates == False):
             sample_count = min(row['count'], len(row['target_list']))
-            all_sampled_targets.extend(random.choice(row['target_list'], size=sample_count, replace=False))
+            all_sampled_targets.extend(randomState.choice(row['target_list'], size=sample_count, replace=False))
         else:
             sample_count = row['count']
-            all_sampled_targets.extend(random.choice(row['target_list'], size=sample_count, replace=True))
+            all_sampled_targets.extend(randomState.choice(row['target_list'], size=sample_count, replace=True))
         all_sampled_sources.extend([row['source']]*sample_count)
     negative_df = pd.DataFrame({'source': all_sampled_sources, 'target': all_sampled_targets}) 
     return negative_df
